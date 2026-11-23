@@ -5,14 +5,10 @@ import KpiCards from "./components/KpiCards.jsx";
 import Breakdown from "./components/Breakdown.jsx";
 import AddSaleForm from "./components/AddSaleForm.jsx";
 import SalesTable from "./components/SalesTable.jsx";
-
-function currentMonth() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
+import { currentMonthMYT } from "./dates.js";
 
 export default function App() {
-  const [filters, setFilters] = useState({ month: currentMonth(), category: "", channel: "" });
+  const [filters, setFilters] = useState({ month: currentMonthMYT(), category: "", channel: "" });
   const [options, setOptions] = useState({ categories: [], channels: [], months: [] });
   const [summary, setSummary] = useState(null);
   const [sales, setSales] = useState([]);

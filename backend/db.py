@@ -8,7 +8,7 @@ The dashboard KPIs are computed in `summary()`.
 """
 
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import asyncpg
@@ -16,6 +16,15 @@ import asyncpg
 DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql://sales:sales@localhost:5442/sales"
 )
+
+# The business runs on Malaysia time (Asia/Kuala_Lumpur). Malaysia has no
+# daylight saving, so a fixed UTC+8 offset is exact and needs no tz database.
+MYT = timezone(timedelta(hours=8), "MYT")
+
+
+def today_myt() -> date:
+    """Today's calendar date in Malaysia, regardless of the server's timezone."""
+    return datetime.now(MYT).date()
 
 # Shared connection pool, set by init_db().
 pool: asyncpg.Pool | None = None
@@ -236,7 +245,7 @@ async def seed_if_empty(conn):
     if n and n > 0:
         return
 
-    today = date.today()
+    today = today_myt()
     categories = [
         ("Cafe", ["Latte", "Iced Tea", "Sandwich", "Protein Bar"]),
         ("Pro Shop", ["Paddle", "Grip Tape", "Ball Pack", "Cap"]),

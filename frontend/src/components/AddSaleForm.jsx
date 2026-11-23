@@ -1,15 +1,9 @@
 import React, { useState } from "react";
 import * as api from "../api.js";
-
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-};
+import { todayMYT } from "../dates.js";
 
 const empty = () => ({
-  sale_date: today(),
+  sale_date: todayMYT(),
   product: "",
   category: "",
   channel: "online",

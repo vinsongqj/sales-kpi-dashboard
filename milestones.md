@@ -49,3 +49,24 @@ Each entry answers three questions:
   - November with the Cafe filter still shows **60.6%**
   - December (no target) and "All months" show **—**
   - a temporary target of 0 also showed **—**; the test target was removed afterwards
+
+## A6 · "Today" now always means today in Malaysia
+- **What changed:** Every place that works out "today" now uses Malaysia time (UTC+8):
+  - **Server:** a new `today_myt()` in `backend/db.py`, used when creating the sample data.
+  - **Browser:** a new `frontend/src/dates.js` with `todayMYT()` and `currentMonthMYT()`, used for the dashboard's default month (`App.jsx`) and the Add Sale form's default date (`AddSaleForm.jsx`).
+- **Why:** The business runs on Malaysia time, but "today" came from two different clocks, and neither was Malaysia's:
+  - **The server runs on UTC**, 8 hours behind Malaysia. From midnight to 8 am in Malaysia the server still thinks it's yesterday. If the sample data is created then, it's dated a day early, and on the 1st of a month it lands in the previous month.
+  - **The browser uses the viewer's own timezone.** Someone viewing from London or the US could see the wrong month selected by default, or a new sale pre-filled with yesterday's date.
+
+  Malaysia doesn't use daylight saving, so a fixed "+8 hours" is always correct. No extra timezone package is needed.
+- **How we checked:**
+  - Backend still compiles; frontend builds (`✓ built`).
+  - Server, at midnight boundaries:
+    - 30 Nov 17:00 UTC → Malaysia date **1 Dec**
+    - 30 Nov 15:59 UTC → still **30 Nov**
+    - 31 Dec 16:00 UTC → **1 Jan 2027** (year rollover)
+  - Browser, simulated in UTC:
+    - 30 Nov 17:00 UTC → today **2026-12-01**, month **2026-12**
+    - 28 Feb 2028 16:30 UTC → **2028-02-29** (leap day)
+  - At the time of this change (23:40 in Malaysia, 15:40 UTC) both clocks happened to agree on 23 Nov. After 16:00 UTC they'd disagree, and the new code would follow Malaysia.
+  - The existing sample data isn't regenerated, because seeding only runs on an empty database. The fix applies the next time the data is reset.
