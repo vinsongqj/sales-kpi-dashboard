@@ -43,7 +43,7 @@ export default function TargetEditor({ selectedMonth, onSaved }) {
   const current = targets[month];
   const value = Number(amount);
   const valid =
-    /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && amount !== "" && Number.isFinite(value) && value > 0;
+    /^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(month) && amount !== "" && Number.isFinite(value) && value > 0;
 
   const submit = async (e) => {
     e.preventDefault();

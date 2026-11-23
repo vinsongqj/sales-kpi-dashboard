@@ -146,7 +146,8 @@ async def summary(conn, month=None, category=None, channel=None):
         total_revenue += _line_net(r)
         order_count += 1
 
-    aov = total_revenue / order_count if order_count else 0.0
+    # No orders means nothing to average: None (shown as "N/A"), not RM 0.00.
+    aov = total_revenue / order_count if order_count else None
 
     # Revenue by category
     by_category = {}
@@ -175,7 +176,7 @@ async def summary(conn, month=None, category=None, channel=None):
     return {
         "total_revenue": round(total_revenue, 2),
         "order_count": order_count,
-        "avg_order_value": round(aov, 2),
+        "avg_order_value": round(aov, 2) if aov is not None else None,
         "target": target,
         "attainment_pct": attainment_pct,
         "by_category": [
@@ -286,7 +287,9 @@ async def create_sale(conn, s):
 
 
 async def delete_sale(conn, sale_id):
-    await conn.execute("DELETE FROM sales WHERE id = $1", sale_id)
+    """Delete one sale; returns False if no sale has that id."""
+    deleted = await conn.fetchval("DELETE FROM sales WHERE id = $1 RETURNING id", sale_id)
+    return deleted is not None
 
 
 async def filters(conn):

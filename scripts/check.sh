@@ -95,7 +95,7 @@ for m in "${months[@]}"; do
       [ -n "$cat" ] && w="$w and category='$cat'" && q="$q&category=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$cat")"
       [ -n "$ch" ]  && w="$w and channel='$ch'" && q="$q&channel=$ch"
       exp=$(sql "select coalesce(round($NET,2),0)::float8 ||' '|| count(*) ||' '|| coalesce(round($NET/nullif(count(*),0),2),0)::float8 from sales where $w")
-      got=$(curl -s "$API/api/summary?${q#&}" | jget "f\"{float(d['total_revenue'])} {d['order_count']} {float(d['avg_order_value'])} {round(sum(x['revenue'] for x in d['by_category']),2)} {round(sum(x['revenue'] for x in d['by_channel']),2)}\"")
+      got=$(curl -s "$API/api/summary?${q#&}" | jget "f\"{float(d['total_revenue'])} {d['order_count']} {float(d['avg_order_value'] or 0)} {round(sum(x['revenue'] for x in d['by_category']),2)} {round(sum(x['revenue'] for x in d['by_channel']),2)}\"")
       same=$(python3 -c "e=list(map(float,'$exp'.split())); g=list(map(float,'$got'.split())); print(abs(e[0]-g[0])<0.01 and e[1]==g[1] and abs(e[2]-g[2])<0.01 and abs(g[0]-g[3])<0.01 and abs(g[0]-g[4])<0.01)")
       [ "$same" = True ] || { mism=$((mism+1)); echo "    mismatch ?$q expected=[$exp] got=[$got]"; }
     done
@@ -109,6 +109,9 @@ check "current-month attainment = store-wide revenue / target" "$(curl -s "$API/
 first_cat=${cats[1]}
 check "attainment ignores category filter (store-wide)" "$(curl -s "$API/api/summary?month=$CUR&category=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$first_cat")" | jget 'd["attainment_pct"]')" "${exp_att:-None}"
 check "All months: attainment N/A" "$(curl -s "$API/api/summary" | jget 'd["attainment_pct"]')" "None"
+if [ -z "$(sql "select 1 from sales where to_char(sale_date,'YYYY-MM')='$NEXT'")" ]; then
+  check "month with no sales ($NEXT): 0 orders, average order value N/A" "$(curl -s "$API/api/summary?month=$NEXT" | jget 'd["order_count"], d["avg_order_value"]')" "0 None"
+else skip "$NEXT already has sales; empty-month AOV case not available"; fi
 if [ -z "$(sql "select 1 from monthly_targets where month='$OLD'")" ]; then
   check "month with no target ($OLD): attainment N/A" "$(curl -s "$API/api/summary?month=$OLD" | jget 'd["attainment_pct"]')" "None"
 else skip "$OLD has a target; no-target attainment case not available"; fi
@@ -163,7 +166,9 @@ for c in "month 13|2026-13|{\"target_amount\":5000}" "target 0|$NEXT|{\"target_a
   IFS='|' read -r label m body <<<"$c"
   check "set target, $label" "$(code -X PUT -H 'Content-Type: application/json' -d "$body" $API/api/targets/$m)" "422"
 done
-for q in "summary?month=2026-13" "sales?month=abc" "pace?month=2026-00"; do check "GET /api/$q" "$(code "$API/api/$q")" "422"; done
+for q in "summary?month=2026-13" "sales?month=abc" "pace?month=2026-00" "pace?month=0000-01"; do check "GET /api/$q" "$(code "$API/api/$q")" "422"; done
+check "set target for year 0000 rejected" "$(code -X PUT -H 'Content-Type: application/json' -d '{"target_amount":100}' $API/api/targets/0000-01)" "422"
+check "deleting a sale that doesn't exist gives 404" "$(code -X DELETE $API/api/sales/2147483647)" "404"
 check "rejected requests added no rows" "$(sql "select count(*) from sales")" "$SALES0"
 
 echo "== 6. Part C: target editor"

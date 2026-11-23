@@ -345,3 +345,31 @@ A full re-read of every Part B/C change, looking for leftover duplicate code and
   - **Fix:** a preflight step now checks python3, curl, Docker access, the API, today's date and the database before running anything. If any is missing it stops with a plain explanation and the fix, e.g. "run `newgrp docker` (or open a new terminal)".
   - **Your data was untouched:** with the month blank, the target writes went to an invalid address and were rejected (the `307`s), and the future-dated sale test was skipped. The database still has 150 sales and the 3 original targets.
   - **Checked:** a locked Docker socket (your case) gives the permission message; Docker unreachable gives a "can't reach the database" message with Docker's own error. Both exit with code 2 and run no checks. A normal run is still **49 passed, 0 failed**.
+
+## D1 · Part D slide deck
+- **What changed:** A 7-slide deck on claude.ai: https://claude.ai/artifact/P6beCsDSKYyVgg7tzaxV7r (private until shared from its Share menu). Each slide has speaker notes. Nothing in the app's code changed.
+  1. Title
+  2. The five calculation bugs: what was wrong, the fix, and November before → after
+  3. The four safety fixes: Malaysia time, input validation, never NaN, and the Infinity crash
+  4. Pace to Target: the formula, the November example, and how each tricky case is handled
+  5. Part C: the target editor, with dark mode as a smaller extra
+  6. Verification: `scripts/check.sh` and its 49 checks, including the "put the bug back" test
+  7. How Claude Code was used: where it helped, where I steered it, where it was wrong
+- **Why:** This is the brief's Part D: about 5–8 slides covering the bugs, the enhancement, the innovation, and how Claude Code was used. The content comes from this file, so every number matches what was verified. Figures are quoted as of 24 Nov 2026 (Malaysia time), because pace numbers change daily.
+- **How we checked:** Each slide's text was sized to fit the 1920×1080 canvas with nothing below 24px. Text colours were chosen to pass contrast on their backgrounds, and red/green is never the only signal. The slide 7 notes are a draft from the session, for the presenter to adjust to their own words.
+
+## Final check · Three last edge cases fixed (53 checks)
+- **What was run:** the full `scripts/check.sh` suite (49/49 passing), plus new probes at the extremes: odd years, deleting a sale that doesn't exist, and a month with no sales. These found three gaps:
+- **1. Year "0000" was accepted as a month** (`backend/sales/routes.py`, `TargetEditor.jsx`)
+  - **What was wrong:** the month rule only checked for four digits. A target could be saved for "0000-01", and that month would then appear in the dropdown. (The probe did exactly that; the junk row was deleted straight away.)
+  - **Fix:** years must be 1000–9999, on the server and in the form.
+  - **Checked:** `0000-01` and `0999-12` → **422**; `1000-01` and `2026-11` → **200**.
+- **2. Deleting a sale that doesn't exist said "ok"** (`backend/db.py`, `routes.py`)
+  - **What was wrong:** e.g. two browser tabs deleting the same sale. The second delete reported success.
+  - **Fix:** the API now says **404 "Sale not found"**, which the sales table shows as an error (added in the re-sweep).
+  - **Checked:** a real delete gives 200; deleting it again gives 404.
+- **3. Average order value for a month with no sales showed RM 0.00** (`backend/db.py`)
+  - **What was wrong:** with no orders there is nothing to average, so "RM 0.00" is misleading.
+  - **Fix:** it now comes back empty and the card shows **N/A**, matching how the dashboard treats every other "no data" case.
+  - **Checked:** December (0 orders) → N/A; November is unchanged at RM 140.90.
+- **Suite and deck updated:** these cases were added to `scripts/check.sh`, which also now accepts an empty average where a selection has no orders. Result: **53 passed, 0 failed**, and the data is unchanged (150 sales, 3 targets). The slide deck's numbers were updated to match: 53 checks, 21 bad inputs.

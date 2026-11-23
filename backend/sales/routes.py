@@ -7,16 +7,17 @@ lives in `db.summary()`.
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 import db
 
 router = APIRouter()
 
-# 'YYYY-MM' with a real month (01–12). Bad values get a 422 instead of
-# silently matching nothing or breaking date math downstream.
-MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
+# 'YYYY-MM' with a real month (01–12) and a 4-digit year from 1000 (no
+# "0000-01"). Bad values get a 422 instead of silently matching nothing or
+# breaking date math downstream.
+MONTH_PATTERN = r"^[1-9]\d{3}-(0[1-9]|1[0-2])$"
 Month = Annotated[str | None, Query(pattern=MONTH_PATTERN)]
 
 
@@ -66,7 +67,8 @@ async def post_sale(sale: SaleIn):
 @router.delete("/sales/{sale_id}")
 async def remove_sale(sale_id: int):
     async with db.pool.acquire() as conn:
-        await db.delete_sale(conn, sale_id)
+        if not await db.delete_sale(conn, sale_id):
+            raise HTTPException(status_code=404, detail="Sale not found")
     return {"ok": True}
 
 
