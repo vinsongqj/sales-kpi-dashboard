@@ -60,8 +60,13 @@ async def close_db():
 # --------------------------------------------------------------------------- #
 
 def _line_net(r):
-    """Net revenue for a single sale line."""
-    return float(r["quantity"] * r["unit_price"] - r["discount_pct"])
+    """Net revenue for a single sale line.
+
+    `discount_pct` is a percentage (e.g. 15 = 15% off), so it scales the gross
+    line amount rather than being subtracted as a flat RM value.
+    """
+    gross = r["quantity"] * r["unit_price"]
+    return float(gross * (1 - r["discount_pct"] / 100))
 
 
 # --------------------------------------------------------------------------- #
