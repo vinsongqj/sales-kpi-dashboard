@@ -1,12 +1,16 @@
 import React from "react";
 import * as api from "../api.js";
-import { rm } from "../format.js";
+import { rm, channelLabel } from "../format.js";
 
 export default function SalesTable({ sales, onDeleted }) {
   const remove = async (id) => {
     if (!confirm("Delete this sale?")) return;
-    await api.deleteSale(id);
-    onDeleted();
+    try {
+      await api.deleteSale(id);
+      onDeleted();
+    } catch (err) {
+      alert("Failed to delete sale: " + (err.message || err));
+    }
   };
 
   return (
@@ -33,7 +37,7 @@ export default function SalesTable({ sales, onDeleted }) {
                 <td>{s.sale_date}</td>
                 <td>{s.product}</td>
                 <td>{s.category}</td>
-                <td>{s.channel}</td>
+                <td>{channelLabel(s.channel)}</td>
                 <td className="num">{s.quantity}</td>
                 <td className="num">{rm(s.unit_price)}</td>
                 <td className="num">{s.discount_pct}</td>

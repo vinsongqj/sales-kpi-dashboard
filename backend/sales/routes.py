@@ -23,14 +23,17 @@ Month = Annotated[str | None, Query(pattern=MONTH_PATTERN)]
 class SaleIn(BaseModel):
     # Trim surrounding spaces from text fields before validating, so "   " is
     # rejected as empty and "Cafe " doesn't become a separate category.
-    model_config = ConfigDict(str_strip_whitespace=True)
+    # Reject NaN/Infinity outright (they'd crash the DB insert).
+    model_config = ConfigDict(str_strip_whitespace=True, allow_inf_nan=False)
 
     sale_date: date
     product: str = Field(min_length=1)
     category: str = Field(min_length=1)
     channel: Literal["online", "in_store"]
-    quantity: int = Field(ge=1)
-    unit_price: float = Field(ge=0)
+    # Upper bounds are the DB column limits (INTEGER, NUMERIC(10,2)), so an
+    # oversized value gets a 422 instead of a database error (500).
+    quantity: int = Field(ge=1, le=2_147_483_647)
+    unit_price: float = Field(ge=0, lt=100_000_000)
     discount_pct: float = Field(default=0, ge=0, le=100)
     status: Literal["completed", "refunded"] = "completed"
 
@@ -80,6 +83,8 @@ async def get_targets():
 
 
 class TargetIn(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
     # Must be positive: a zero target would make attainment/pace meaningless.
     # NUMERIC(12,2) holds up to 9,999,999,999.99.
     target_amount: float = Field(gt=0, lt=10_000_000_000)

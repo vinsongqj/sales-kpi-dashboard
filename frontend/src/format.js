@@ -13,3 +13,9 @@ export const rm = (n) =>
 
 export const pct = (n) =>
   !finite(n) ? "N/A" : Number(n).toLocaleString("en-MY", { maximumFractionDigits: 1 }) + "%";
+
+// Display names for channel values. The API and database keep the raw values
+// ("online", "in_store"); only what's shown on screen changes. Unknown values
+// are shown as-is.
+const CHANNEL_LABELS = { online: "Online", in_store: "In store" };
+export const channelLabel = (c) => CHANNEL_LABELS[c] ?? c;

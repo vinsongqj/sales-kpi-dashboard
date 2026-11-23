@@ -72,6 +72,7 @@ export default function TargetEditor({ selectedMonth, onSaved }) {
           Month
           <input
             type="month"
+            placeholder="YYYY-MM" /* shown where type=month falls back to text, e.g. Firefox */
             value={month}
             onChange={(e) => setMonth(e.target.value)}
             required

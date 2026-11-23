@@ -233,3 +233,92 @@ Each entry answers three questions:
   - You can still type any amount with sen, e.g. **RM 12,345.67**.
   - Normally the browser treats the step size as a rule and would reject 12,345.67 ("nearest valid values are 12,300 and 12,400"). So the form switches off the browser's own checks and uses its own instead: the month must be a real month, and the amount must be a number above 0. The API checks again (C1).
   - Checked: frontend builds, and saving **12,345.67** through the API stored exactly **12,345.67** (the test target was removed afterwards).
+
+## C3 · Dark mode
+- **What changed:**
+  - A **System / Light / Dark** switch in the top-right of the header (`frontend/src/components/ThemeToggle.jsx`).
+    - **System** (the default) follows the computer's own light/dark setting.
+    - **Light** and **Dark** override it, and the choice is remembered on that browser.
+  - `styles.css` now has a full dark colour set.
+  - Seven colours were hard-coded and would have stayed light in dark mode. They've all been turned into theme colours: the error box, the On track / At risk badges, button text, table row hover, and the green/red status dots.
+  - `color-scheme` is set, so the browser's own controls match the theme: dropdown lists, date and month pickers, number arrows and scrollbars.
+  - A tiny script in `frontend/index.html` applies a saved choice **before the page draws**, so a dark-mode user doesn't see a white flash on load.
+- **Why:** Part C asked for a second improvement, and dark mode is easier on the eyes for a dashboard that's left open all day. It was built on the colour variables the app already used, so every panel (including the new Pace and Target panels) switches together without per-component changes. If the browser blocks saved settings (e.g. private mode), the app quietly falls back to "System" instead of crashing.
+- **How we checked ("no UI broken"):**
+  - Frontend builds (`✓ built`).
+  - No hard-coded colours are left outside the theme definitions, and every colour variable used is defined in both themes. The two copies of the dark theme (OS setting vs manual "Dark") were checked to be identical.
+  - **Text contrast** was measured with the standard WCAG formula. 4.5:1 is the accessibility pass mark for normal text; 3:1 for large text and UI parts:
+
+    | Text on background | Light | Dark |
+    |---|---|---|
+    | Body / card text | 17.6 | 14.6–15.7 |
+    | Labels (grey) | 3.2* | 6.7 |
+    | Button text | 17.6 | 15.7 |
+    | At risk / error badge | 6.0 | 6.1 |
+    | On track badge | 5.4 | 7.6 |
+    | Bars vs their track | 13.7 | 10.0 |
+
+    \*The light-mode grey labels are the app's original design and weren't changed.
+  - The check caught one problem in the new switch: its unselected options were **2.9:1** in light mode, below the 3:1 minimum. They now use the main text colour, with the selected option shown by a raised, bold button.
+  - Saved-setting fallbacks: no storage available → **System**; saved "dark" → **Dark**; storage that throws an error → **System**, no crash.
+
+## C3a · Add Sale dropdown labels capitalised
+- **What changed:** In the Add Sale form (`AddSaleForm.jsx`), Status now shows **Completed** / **Refunded** and Channel shows **Online** / **In store**, instead of the raw lowercase values (`in_store` with an underscore).
+- **Why:** Your feedback: it looked unpolished next to the rest of the form. Only the **visible label** changed. The values sent to the API are still `completed` / `refunded` and `online` / `in_store`, which is what the API accepts (A7) and what's stored. Nothing else is affected, and the sales table already shows the status capitalised.
+- **How we checked:** Frontend builds (`✓ built`). The option values are unchanged (`completed`, `refunded`, `online`, `in_store`).
+
+## Parts B & C review · Gaps found and fixed
+A full re-read of every Part B/C change, looking for leftover duplicate code and unhandled edge cases. Each suspected problem was reproduced against the live app before it was fixed.
+
+- **1. Future-dated sales inflated the pace forecast** (`backend/db.py`, `pace`)
+  - **What was wrong:** Month-to-date counted every sale in the month, including ones dated later than today. Court bookings are naturally made in advance. One RM 5,000 booking dated 30 Nov turned November from **at risk (projected RM 7,573)** into **on track (RM 13,823)**, because the run-rate treated future money as already earned.
+  - **Fix:** Pace now only counts sales dated **up to today** (Malaysia time). Total revenue and target attainment still include all of the month's booked sales, because they answer "how much is booked this month", not "how fast are we going".
+  - **Checked:** with the same booking added, pace stays **RM 6,058.70 → RM 7,573.38, at risk**. October (past) is unchanged. The test sale was deleted.
+- **2. The month dropdown could miss the month it was showing** (`backend/db.py`, `filters`)
+  - **What was wrong:** On the 1st of a new month (no sales or target yet), the dashboard opens on that month, but the dropdown only listed months with sales or targets. It would show "All months" while displaying something else.
+  - **Fix:** The current month is always in the list.
+  - **Checked:** simulating 1 Dec, the dropdown lists **2026-12** first, and pace shows day **1/31**, RM 0, no divide-by-zero.
+- **3. Some impossible numbers crashed the API** (`backend/sales/routes.py`, `backend/main.py`)
+  - **What was wrong:** A price or target of `Infinity`/`NaN`, a price of RM 100 million or more, or a quantity over 2.1 billion caused a **500 server error** instead of a clean "invalid input". The browser forms can't send these, but any other API client can.
+  - The price and quantity limits now match the database columns.
+  - `Infinity`/`NaN` are rejected outright.
+  - One subtle catch: the standard error reply **repeats the bad value back**, and `Infinity` can't be written in JSON, so even the rejection crashed. A small error handler now writes such values as text.
+  - **Checked:** all of these now return **422** with a clear reason, e.g. "Input should be a finite number" or "Input should be less than 100000000". Earlier checks (quantity 0, month 2026-13) still return 422.
+- **4. Duplicate code removed** (`backend/db.py`): the "look up this month's target" query was copied in both `summary` and `pace`. It's now one helper, `_month_target`.
+- **5. Quick month switching could show stale numbers** (`frontend/src/App.jsx`)
+  - **What was wrong:** If an older, slower reply arrived after a newer one, it overwrote the screen. You could see October's pace under a November heading.
+  - **Fix:** Each load is numbered, and only the newest one may update the screen.
+  - **Checked:** by reading the code only; this timing race is hard to trigger by hand.
+- **6. Month box hint for Firefox** (`TargetEditor.jsx`): Firefox shows the target form's Month box as plain text, so it now has a "YYYY-MM" placeholder. The form already rejects badly formatted months.
+- **Overall checks:**
+  - Backend compiles, and `pyflakes` finds no unused imports or variables. Frontend builds, and no unused imports were found.
+  - The **Part A regression** (60 month × category × channel combinations against the database) still has **0 mismatches**.
+
+## C3b · Channel names shown the same everywhere
+- **What changed:** A small helper, `channelLabel` in `frontend/src/format.js`, turns the stored channel values into display names: `online` → **Online**, `in_store` → **In store**. It's used in all four places a channel appears:
+  - the sales table's Channel column (`SalesTable.jsx`)
+  - the Channel filter dropdown (`FilterBar.jsx`)
+  - the "Revenue by Channel" bars (`Breakdown.jsx`, via a new optional `formatLabel`)
+  - the Add Sale form (`AddSaleForm.jsx`)
+- **Why:** Your feedback. After C3a, Add Sale said "In store" but the sales table underneath still showed the raw `in_store`. Using one helper means the names are defined in **one place** and can't drift apart again. Only the on-screen text changes: the API, the database and the filter values all still use `online` / `in_store`. An unexpected channel value is shown as-is rather than hidden.
+- **How we checked:**
+  - Frontend builds (`✓ built`).
+  - The helper gives `online` → "Online", `in_store` → "In store", and leaves unknown values unchanged.
+  - A code search finds no remaining spot that shows the raw channel value.
+
+## Full re-sweep · 49 automated checks, plus two more fixes
+- **What was run:** One script re-ran every check from Parts A–C together. It leaves the data exactly as it found it.
+  - **Code:** backend compiles; `pyflakes` finds nothing unused; frontend builds; no unused imports.
+  - **Duplicates:** no hard-coded colours outside the theme; the target query and the month rule each exist once; no raw channel names on screen.
+  - **Part A:** 60 month × category × channel combinations against the database. Attainment stays store-wide, and is N/A for "All months" and months with no target.
+  - **Part B:** live past / current / future / no-target months, plus 11 calculation edge cases (leap and 28/30/31-day months, day 1, exactly on target, year change).
+  - **Validation:** 19 bad inputs, all rejected with 422 and never 500. Rejected requests add no rows.
+  - **Part C:** saving a target creates then replaces one row; the new month appears in the dropdown; the current month is listed even on the 1st.
+  - **Forecast:** a future-dated sale doesn't change the pace figures.
+  - **Screen:** the N/A formatters and channel names behave correctly; the pace panel was rendered 10 ways with no "NaN", "Infinity" or "undefined"; the theme defaults to System.
+  - **Clean-up:** the data was unchanged afterwards.
+- **Result:** **49 passed, 0 failed.** (The first run showed 4 failures. They were a formatting mistake in the test script's expected values, not app bugs, and the actual values were correct.)
+- **Two more gaps found by reading the code, and fixed:**
+  - **Filters didn't refresh after adding or deleting a sale** (`App.jsx`). Add a sale in a new category like "Merch" and it wouldn't appear in the Category filter until a page reload. Adding or deleting a sale now refreshes the filter lists too. Checked: after adding a "Merch" sale the API's category list includes Merch, and after deleting it Merch is gone (test sale removed).
+  - **A failed delete was silent** (`SalesTable.jsx`). If the API was unreachable, clicking Delete did nothing and gave no message. It now shows "Failed to delete sale: …", matching how Add Sale already reports errors.
+- Frontend builds after both fixes, and the full suite still passes **49/49**.

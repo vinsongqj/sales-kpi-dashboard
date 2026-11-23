@@ -79,18 +79,32 @@ def _line_net(r):
     return float(gross * (1 - r["discount_pct"] / 100))
 
 
-async def _month_net_revenue(conn, month):
+async def _month_net_revenue(conn, month, up_to=None):
     """Store-wide net revenue (completed sales only) for a 'YYYY-MM' month.
 
     Deliberately ignores category/channel filters: monthly targets are
     store-wide, so progress against them must be measured store-wide too.
+    `up_to` (a date) limits it to sales on or before that day, e.g. so a
+    booking dated later this month doesn't count as revenue "so far".
     """
-    rows = await conn.fetch(
+    sql = (
         "SELECT quantity, unit_price, discount_pct FROM sales"
-        " WHERE status = 'completed' AND to_char(sale_date, 'YYYY-MM') = $1",
-        month,
+        " WHERE status = 'completed' AND to_char(sale_date, 'YYYY-MM') = $1"
     )
-    return sum(_line_net(r) for r in rows)
+    params = [month]
+    if up_to is not None:
+        params.append(up_to)
+        sql += " AND sale_date <= $2"
+    rows = await conn.fetch(sql, *params)
+    return sum((_line_net(r) for r in rows), 0.0)
+
+
+async def _month_target(conn, month):
+    """The target for a 'YYYY-MM' month as a float, or None if not set."""
+    target = await conn.fetchval(
+        "SELECT target_amount FROM monthly_targets WHERE month = $1", month
+    )
+    return float(target) if target is not None else None
 
 
 # --------------------------------------------------------------------------- #
@@ -153,18 +167,16 @@ async def summary(conn, month=None, category=None, channel=None):
     target = None
     attainment_pct = None
     if month:
-        target = await conn.fetchval(
-            "SELECT target_amount FROM monthly_targets WHERE month = $1", month
-        )
+        target = await _month_target(conn, month)
         if target is not None and target > 0:
             month_revenue = await _month_net_revenue(conn, month)
-            attainment_pct = round(month_revenue / float(target) * 100, 1)
+            attainment_pct = round(month_revenue / target * 100, 1)
 
     return {
         "total_revenue": round(total_revenue, 2),
         "order_count": order_count,
         "avg_order_value": round(aov, 2),
-        "target": float(target) if target is not None else None,
+        "target": target,
         "attainment_pct": attainment_pct,
         "by_category": [
             {"category": k, "revenue": round(v, 2)} for k, v in sorted(by_category.items())
@@ -231,17 +243,17 @@ async def pace(conn, month=None):
     """Pace to Target for a 'YYYY-MM' month (default: current month, MYT).
 
     Store-wide, like attainment: the target covers the whole store, so
-    category/channel filters don't apply.
+    category/channel filters don't apply. Month-to-date only counts sales
+    dated up to today (MYT); future-dated sales (e.g. bookings) aren't
+    revenue "so far" and would inflate the run-rate.
     """
     today = today_myt()
     month = month or today.strftime("%Y-%m")
     year, mon = (int(p) for p in month.split("-"))
 
-    mtd = await _month_net_revenue(conn, month)
-    target = await conn.fetchval(
-        "SELECT target_amount FROM monthly_targets WHERE month = $1", month
-    )
-    return _pace(mtd, float(target) if target is not None else None, year, mon, today)
+    mtd = await _month_net_revenue(conn, month, up_to=today)
+    target = await _month_target(conn, month)
+    return _pace(mtd, target, year, mon, today)
 
 
 # --------------------------------------------------------------------------- #
@@ -281,15 +293,17 @@ async def filters(conn):
     cats = await conn.fetch("SELECT DISTINCT category FROM sales ORDER BY category")
     chans = await conn.fetch("SELECT DISTINCT channel FROM sales ORDER BY channel")
     # Months with sales OR a target, so a future month becomes selectable as
-    # soon as it has a target (UNION also removes duplicates).
-    months = await conn.fetch(
+    # soon as it has a target, plus the current month (MYT), which the
+    # dashboard opens on even before it has any sales (e.g. on the 1st).
+    rows = await conn.fetch(
         "SELECT to_char(sale_date, 'YYYY-MM') AS m FROM sales"
-        " UNION SELECT month FROM monthly_targets ORDER BY m DESC"
+        " UNION SELECT month FROM monthly_targets"
     )
+    months = {r["m"] for r in rows} | {today_myt().strftime("%Y-%m")}
     return {
         "categories": [r["category"] for r in cats],
         "channels": [r["channel"] for r in chans],
-        "months": [r["m"] for r in months],
+        "months": sorted(months, reverse=True),
     }
 
 

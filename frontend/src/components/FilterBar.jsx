@@ -1,4 +1,5 @@
 import React from "react";
+import { channelLabel } from "../format.js";
 
 export default function FilterBar({ filters, options, onChange }) {
   const set = (key) => (e) => onChange({ ...filters, [key]: e.target.value });
@@ -35,7 +36,7 @@ export default function FilterBar({ filters, options, onChange }) {
           <option value="">All channels</option>
           {options.channels.map((c) => (
             <option key={c} value={c}>
-              {c}
+              {channelLabel(c)}
             </option>
           ))}
         </select>

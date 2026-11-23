@@ -5,7 +5,8 @@ import { rm } from "../format.js";
 const barWidth = (value, max) =>
   Number.isFinite(value) ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
 
-export default function Breakdown({ title, rows, labelKey }) {
+// `formatLabel` turns a raw key (e.g. "in_store") into display text.
+export default function Breakdown({ title, rows, labelKey, formatLabel = (v) => v }) {
   // At least 1 so an all-zero breakdown never divides by zero.
   const max = Math.max(1, ...rows.map((r) => r.revenue).filter(Number.isFinite));
 
@@ -15,7 +16,7 @@ export default function Breakdown({ title, rows, labelKey }) {
       {rows.length === 0 && <p className="muted">No data.</p>}
       {rows.map((r) => (
         <div className="bar-row" key={r[labelKey]}>
-          <div className="bar-label">{r[labelKey]}</div>
+          <div className="bar-label">{formatLabel(r[labelKey])}</div>
           <div className="bar-track">
             <div className="bar-fill" style={{ width: `${barWidth(r.revenue, max)}%` }} />
           </div>
