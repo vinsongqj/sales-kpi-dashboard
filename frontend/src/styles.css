@@ -10,8 +10,66 @@
   --fill: #23262c; /* bar fill (monochrome) */
   --danger: #b42318;
   --ok: #067647;
+  --danger-bg: #fef3f2; /* error / at-risk tint */
+  --danger-border: #fecdca;
+  --ok-bg: #ecfdf3; /* on-track tint */
+  --dot-ok: #12b76a; /* status dots */
+  --dot-danger: #e04a3c;
+  --on-ink: #ffffff; /* text on --ink buttons */
+  --hover: #fafbfc; /* table row hover */
   --radius: 12px;
   --ring: 0 0 0 3px rgba(23, 25, 29, 0.08);
+  color-scheme: light; /* native inputs, pickers, scrollbars */
+}
+
+/* Dark theme: follows the OS unless the user picked Light/Dark explicitly
+   (data-theme on <html>, set by ThemeToggle). Same tokens, dark values. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1115;
+    --surface: #161920;
+    --line: #23272f;
+    --border: #2a2f38;
+    --ink: #e8eaed;
+    --muted: #9aa0aa;
+    --faint: #646a75;
+    --track: #252a33;
+    --fill: #d4d7dc;
+    --danger: #f97066;
+    --ok: #47cd89;
+    --danger-bg: #2d1614;
+    --danger-border: #5c2621;
+    --ok-bg: #0f2a1d;
+    --dot-ok: #32d583;
+    --dot-danger: #f97066;
+    --on-ink: #0f1115;
+    --hover: #1b1f27;
+    --ring: 0 0 0 3px rgba(232, 234, 237, 0.14);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f1115;
+  --surface: #161920;
+  --line: #23272f;
+  --border: #2a2f38;
+  --ink: #e8eaed;
+  --muted: #9aa0aa;
+  --faint: #646a75;
+  --track: #252a33;
+  --fill: #d4d7dc;
+  --danger: #f97066;
+  --ok: #47cd89;
+  --danger-bg: #2d1614;
+  --danger-border: #5c2621;
+  --ok-bg: #0f2a1d;
+  --dot-ok: #32d583;
+  --dot-danger: #f97066;
+  --on-ink: #0f1115;
+  --hover: #1b1f27;
+  --ring: 0 0 0 3px rgba(232, 234, 237, 0.14);
+  color-scheme: dark;
 }
 
 * {
@@ -42,6 +100,35 @@ body {
 /* Header ------------------------------------------------------------------ */
 .app-header {
   margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Theme switch (System / Light / Dark) */
+.theme-toggle {
+  display: inline-flex;
+  background: var(--track);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.theme-toggle button {
+  background: transparent;
+  border: none;
+  color: var(--ink); /* --muted on --track is only 2.9:1 in light mode */
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.theme-toggle button.active {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
 .app-header h1 {
@@ -58,9 +145,9 @@ body {
 }
 
 .error {
-  background: #fef3f2;
+  background: var(--danger-bg);
   color: var(--danger);
-  border: 1px solid #fecdca;
+  border: 1px solid var(--danger-border);
   padding: 10px 14px;
   border-radius: var(--radius);
   margin-bottom: 20px;
@@ -210,6 +297,69 @@ input:focus {
   color: var(--muted);
 }
 
+/* Pace to Target ---------------------------------------------------------- */
+.pace-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.pace-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--track);
+  color: var(--muted);
+}
+
+.pace-status.on_track {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.pace-status.at_risk {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.pace-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.pace-value {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pace-sub {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pace-track {
+  margin-bottom: 4px;
+}
+
+.pace-note {
+  margin: 10px 0 0;
+}
+
+.target-note {
+  margin: 0 0 14px;
+}
+
+form .target-note:last-child {
+  margin: 12px 0 0;
+}
+
 /* Add form ---------------------------------------------------------------- */
 .form-grid {
   display: grid;
@@ -242,7 +392,7 @@ button {
   padding: 9px 18px;
   border: 1px solid var(--ink);
   background: var(--ink);
-  color: #fff;
+  color: var(--on-ink);
   border-radius: 8px;
   transition: opacity 0.12s ease;
 }
@@ -306,7 +456,7 @@ tbody tr:last-child td {
 }
 
 tbody tr:hover td {
-  background: #fafbfc;
+  background: var(--hover);
 }
 
 td.num,
@@ -339,11 +489,11 @@ tr.refunded td {
 }
 
 .badge.completed::before {
-  background: #12b76a;
+  background: var(--dot-ok);
 }
 
 .badge.refunded::before {
-  background: #e04a3c;
+  background: var(--dot-danger);
 }
 
 /* Responsive -------------------------------------------------------------- */
@@ -356,6 +506,9 @@ tr.refunded td {
   }
   .grid-2 {
     grid-template-columns: 1fr;
+  }
+  .pace-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
   .form-grid {
     grid-template-columns: repeat(2, 1fr);

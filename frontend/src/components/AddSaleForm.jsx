@@ -1,15 +1,10 @@
 import React, { useState } from "react";
 import * as api from "../api.js";
-
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-};
+import { todayMYT } from "../dates.js";
+import { channelLabel } from "../format.js";
 
 const empty = () => ({
-  sale_date: today(),
+  sale_date: todayMYT(),
   product: "",
   category: "",
   channel: "online",
@@ -67,8 +62,11 @@ export default function AddSaleForm({ options, onCreated }) {
         <label>
           Channel
           <select value={form.channel} onChange={set("channel")}>
-            <option value="online">online</option>
-            <option value="in_store">in_store</option>
+            {["online", "in_store"].map((c) => (
+              <option key={c} value={c}>
+                {channelLabel(c)}
+              </option>
+            ))}
           </select>
         </label>
         <label>
@@ -100,8 +98,8 @@ export default function AddSaleForm({ options, onCreated }) {
         <label>
           Status
           <select value={form.status} onChange={set("status")}>
-            <option value="completed">completed</option>
-            <option value="refunded">refunded</option>
+            <option value="completed">Completed</option>
+            <option value="refunded">Refunded</option>
           </select>
         </label>
       </div>

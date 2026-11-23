@@ -21,6 +21,15 @@ async function request(path, opts) {
 export const getSummary = (q) => request(`/api/summary${qs(q)}`);
 export const getSales = (q) => request(`/api/sales${qs(q)}`);
 export const getFilters = () => request(`/api/filters`);
+export const getPace = (month) => request(`/api/pace${qs({ month })}`);
+export const getTargets = () => request(`/api/targets`);
+
+export const putTarget = (month, target_amount) =>
+  request(`/api/targets/${month}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target_amount }),
+  });
 
 export const createSale = (body) =>
   request(`/api/sales`, {

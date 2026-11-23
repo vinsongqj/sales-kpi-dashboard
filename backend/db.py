@@ -7,8 +7,9 @@ sample data the first time the database is empty.
 The dashboard KPIs are computed in `summary()`.
 """
 
+import calendar
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import asyncpg
@@ -16,6 +17,15 @@ import asyncpg
 DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql://sales:sales@localhost:5442/sales"
 )
+
+# The business runs on Malaysia time (Asia/Kuala_Lumpur). Malaysia has no
+# daylight saving, so a fixed UTC+8 offset is exact and needs no tz database.
+MYT = timezone(timedelta(hours=8), "MYT")
+
+
+def today_myt() -> date:
+    """Today's calendar date in Malaysia, regardless of the server's timezone."""
+    return datetime.now(MYT).date()
 
 # Shared connection pool, set by init_db().
 pool: asyncpg.Pool | None = None
@@ -60,8 +70,41 @@ async def close_db():
 # --------------------------------------------------------------------------- #
 
 def _line_net(r):
-    """Net revenue for a single sale line."""
-    return float(r["quantity"] * r["unit_price"] - r["discount_pct"])
+    """Net revenue for a single sale line.
+
+    `discount_pct` is a percentage (e.g. 15 = 15% off), so it scales the gross
+    line amount rather than being subtracted as a flat RM value.
+    """
+    gross = r["quantity"] * r["unit_price"]
+    return float(gross * (1 - r["discount_pct"] / 100))
+
+
+async def _month_net_revenue(conn, month, up_to=None):
+    """Store-wide net revenue (completed sales only) for a 'YYYY-MM' month.
+
+    Deliberately ignores category/channel filters: monthly targets are
+    store-wide, so progress against them must be measured store-wide too.
+    `up_to` (a date) limits it to sales on or before that day, e.g. so a
+    booking dated later this month doesn't count as revenue "so far".
+    """
+    sql = (
+        "SELECT quantity, unit_price, discount_pct FROM sales"
+        " WHERE status = 'completed' AND to_char(sale_date, 'YYYY-MM') = $1"
+    )
+    params = [month]
+    if up_to is not None:
+        params.append(up_to)
+        sql += " AND sale_date <= $2"
+    rows = await conn.fetch(sql, *params)
+    return sum((_line_net(r) for r in rows), 0.0)
+
+
+async def _month_target(conn, month):
+    """The target for a 'YYYY-MM' month as a float, or None if not set."""
+    target = await conn.fetchval(
+        "SELECT target_amount FROM monthly_targets WHERE month = $1", month
+    )
+    return float(target) if target is not None else None
 
 
 # --------------------------------------------------------------------------- #
@@ -90,6 +133,10 @@ def _build_filters(month, category, channel):
 
 async def summary(conn, month=None, category=None, channel=None):
     where, params = _build_filters(month, category, channel)
+    # Net revenue counts completed sales only; refunded lines earn nothing and
+    # are not orders. (list_sales still returns them so the table can show them.)
+    completed = "status = 'completed'"
+    where = f"{where} AND {completed}" if where else f"WHERE {completed}"
     rows = await conn.fetch(f"SELECT * FROM sales {where}", *params)
 
     # Totals
@@ -99,37 +146,38 @@ async def summary(conn, month=None, category=None, channel=None):
         total_revenue += _line_net(r)
         order_count += 1
 
-    aov = total_revenue / order_count if order_count else 0.0
+    # No orders means nothing to average: None (shown as "N/A"), not RM 0.00.
+    aov = total_revenue / order_count if order_count else None
 
     # Revenue by category
     by_category = {}
     for r in rows:
-        subtotal = by_category.get(r["category"], 0)
-        subtotal = _line_net(r)
-        by_category[r["category"]] = subtotal
+        by_category[r["category"]] = by_category.get(r["category"], 0.0) + _line_net(r)
 
     # Revenue by channel
     by_channel = {"online": 0.0, "in_store": 0.0}
     for r in rows:
+        # Exact match: a substring test like `"in" in ch` also matches "online".
         ch = r["channel"]
-        if "in" in ch:
-            by_channel["in_store"] += _line_net(r)
-        elif "online" in ch:
-            by_channel["online"] += _line_net(r)
+        if ch in by_channel:
+            by_channel[ch] += _line_net(r)
 
-    # Target attainment for the selected month
+    # Target attainment for the selected month = store-wide revenue / target.
+    # None (rendered "N/A") when no month is selected or the target is missing
+    # or non-positive, so we never divide by zero.
     target = None
+    attainment_pct = None
     if month:
-        target = await conn.fetchval(
-            "SELECT target_amount FROM monthly_targets WHERE month = $1", month
-        )
-    attainment_pct = round(total_revenue / order_count * 100, 1) if order_count else None
+        target = await _month_target(conn, month)
+        if target is not None and target > 0:
+            month_revenue = await _month_net_revenue(conn, month)
+            attainment_pct = round(month_revenue / target * 100, 1)
 
     return {
         "total_revenue": round(total_revenue, 2),
         "order_count": order_count,
-        "avg_order_value": round(aov, 2),
-        "target": float(target) if target is not None else None,
+        "avg_order_value": round(aov, 2) if aov is not None else None,
+        "target": target,
         "attainment_pct": attainment_pct,
         "by_category": [
             {"category": k, "revenue": round(v, 2)} for k, v in sorted(by_category.items())
@@ -138,6 +186,75 @@ async def summary(conn, month=None, category=None, channel=None):
             {"channel": k, "revenue": round(v, 2)} for k, v in by_channel.items()
         ],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Pace to Target
+# --------------------------------------------------------------------------- #
+
+def _round(v, ndigits=2):
+    return round(v, ndigits) if v is not None else None
+
+
+def _pace(mtd, target, year, month, today):
+    """Run-rate forecast for one month. Pure function — no DB, easy to check.
+
+    - Past month:    the month is over, so projected = actual total.
+    - Current month: projected = MTD / days elapsed * days in month, where
+                     today counts as elapsed (so day 1 never divides by zero).
+    - Future month:  0 days elapsed, nothing to project -> None ("N/A").
+
+    Days in month comes from the calendar (28/29/30/31, leap years included).
+    Pace vs target is None when there's no projection or no positive target.
+    """
+    days_in_month = calendar.monthrange(year, month)[1]
+
+    if (year, month) < (today.year, today.month):
+        period, days_elapsed, projected = "past", days_in_month, mtd
+    elif (year, month) == (today.year, today.month):
+        period, days_elapsed = "current", today.day
+        projected = mtd / days_elapsed * days_in_month
+    else:
+        period, days_elapsed, projected = "future", 0, None
+
+    has_target = target is not None and target > 0
+    if projected is not None and has_target:
+        pace_rm = projected - target
+        pace_pct = projected / target * 100
+        status = "on_track" if projected >= target else "at_risk"
+    else:
+        pace_rm = pace_pct = status = None
+
+    return {
+        "month": f"{year}-{month:02d}",
+        "period": period,
+        "as_of": today.isoformat(),
+        "mtd_revenue": _round(mtd),
+        "days_elapsed": days_elapsed,
+        "days_in_month": days_in_month,
+        "projected_revenue": _round(projected),
+        "target": _round(target),
+        "pace_rm": _round(pace_rm),
+        "pace_pct": _round(pace_pct, 1),
+        "status": status,
+    }
+
+
+async def pace(conn, month=None):
+    """Pace to Target for a 'YYYY-MM' month (default: current month, MYT).
+
+    Store-wide, like attainment: the target covers the whole store, so
+    category/channel filters don't apply. Month-to-date only counts sales
+    dated up to today (MYT); future-dated sales (e.g. bookings) aren't
+    revenue "so far" and would inflate the run-rate.
+    """
+    today = today_myt()
+    month = month or today.strftime("%Y-%m")
+    year, mon = (int(p) for p in month.split("-"))
+
+    mtd = await _month_net_revenue(conn, month, up_to=today)
+    target = await _month_target(conn, month)
+    return _pace(mtd, target, year, mon, today)
 
 
 # --------------------------------------------------------------------------- #
@@ -170,19 +287,26 @@ async def create_sale(conn, s):
 
 
 async def delete_sale(conn, sale_id):
-    await conn.execute("DELETE FROM sales WHERE id = $1", sale_id)
+    """Delete one sale; returns False if no sale has that id."""
+    deleted = await conn.fetchval("DELETE FROM sales WHERE id = $1 RETURNING id", sale_id)
+    return deleted is not None
 
 
 async def filters(conn):
     cats = await conn.fetch("SELECT DISTINCT category FROM sales ORDER BY category")
     chans = await conn.fetch("SELECT DISTINCT channel FROM sales ORDER BY channel")
-    months = await conn.fetch(
-        "SELECT DISTINCT to_char(sale_date, 'YYYY-MM') AS m FROM sales ORDER BY m DESC"
+    # Months with sales OR a target, so a future month becomes selectable as
+    # soon as it has a target, plus the current month (MYT), which the
+    # dashboard opens on even before it has any sales (e.g. on the 1st).
+    rows = await conn.fetch(
+        "SELECT to_char(sale_date, 'YYYY-MM') AS m FROM sales"
+        " UNION SELECT month FROM monthly_targets"
     )
+    months = {r["m"] for r in rows} | {today_myt().strftime("%Y-%m")}
     return {
         "categories": [r["category"] for r in cats],
         "channels": [r["channel"] for r in chans],
-        "months": [r["m"] for r in months],
+        "months": sorted(months, reverse=True),
     }
 
 
@@ -191,6 +315,18 @@ async def list_targets(conn):
         "SELECT month, target_amount FROM monthly_targets ORDER BY month DESC"
     )
     return [{"month": r["month"], "target_amount": float(r["target_amount"])} for r in rows]
+
+
+async def upsert_target(conn, month, amount):
+    """Create or replace the target for a 'YYYY-MM' month."""
+    row = await conn.fetchrow(
+        "INSERT INTO monthly_targets (month, target_amount) VALUES ($1, $2)"
+        " ON CONFLICT (month) DO UPDATE SET target_amount = EXCLUDED.target_amount"
+        " RETURNING month, target_amount",
+        month,
+        Decimal(str(amount)),
+    )
+    return {"month": row["month"], "target_amount": float(row["target_amount"])}
 
 
 # --------------------------------------------------------------------------- #
@@ -211,7 +347,7 @@ async def seed_if_empty(conn):
     if n and n > 0:
         return
 
-    today = date.today()
+    today = today_myt()
     categories = [
         ("Cafe", ["Latte", "Iced Tea", "Sandwich", "Protein Bar"]),
         ("Pro Shop", ["Paddle", "Grip Tape", "Ball Pack", "Cap"]),
