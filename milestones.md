@@ -322,3 +322,26 @@ A full re-read of every Part B/C change, looking for leftover duplicate code and
   - **Filters didn't refresh after adding or deleting a sale** (`App.jsx`). Add a sale in a new category like "Merch" and it wouldn't appear in the Category filter until a page reload. Adding or deleting a sale now refreshes the filter lists too. Checked: after adding a "Merch" sale the API's category list includes Merch, and after deleting it Merch is gone (test sale removed).
   - **A failed delete was silent** (`SalesTable.jsx`). If the API was unreachable, clicking Delete did nothing and gave no message. It now shows "Failed to delete sale: …", matching how Add Sale already reports errors.
 - Frontend builds after both fixes, and the full suite still passes **49/49**.
+
+## C4 · One-command correctness check: `scripts/check.sh`
+- **What changed:** The checks used throughout Parts A–C are now one script in the repo. Run `bash scripts/check.sh` with the app running. Usage notes live in the comment at the top of the script; `README.md` is left untouched.
+- **Why:** It turns "trust me, the numbers are right" into something anyone can re-run in about a minute, including live in the Part D walkthrough.
+  - **Doesn't go stale:** it works out "this month", "last month", "next month" etc. from today's Malaysia date, and compares against the database rather than fixed numbers. So it still works after a reseed or when the month changes.
+  - **Leaves no trace:** test sales and targets are removed afterwards, and the last section confirms the data is exactly as it was.
+- **What it covers (49 checks):**
+  - **Code:** builds, compiles, nothing unused or duplicated, no hard-coded colours, no raw channel names on screen.
+  - **Part A:** every month × category × channel total matches the database; attainment is store-wide and N/A where it should be.
+  - **Part B:** live past / current / future / no-target months, plus 11 calculation edge cases.
+  - **Validation:** 19 bad inputs, all rejected cleanly.
+  - **Part C:** the target editor round trip, and the current month always listed.
+  - **Forecast:** future-dated sales don't affect pace.
+  - **Screen:** formatters, channel names, and the pace panel never showing NaN or Infinity.
+- **How we checked the checker:**
+  - **It reached every combination.** The first version reported only **12** combinations instead of 60, because a command inside the loop was reading the loop's own input and cutting it short. That's fixed, and the script now verifies its own coverage ("60 of 4 months × 5 categories × 3 channels"), so it can't quietly shrink again.
+  - **It catches real bugs.** The original A1 discount bug was put back temporarily. The script **failed**: 44 of 60 combinations wrong, and attainment 60.9% instead of 60.6%. With the fix restored: **49 passed, 0 failed**.
+- **Follow-up (your feedback): the script now stops cleanly when it can't reach Docker.**
+  - **What happened:** your run printed 22 FAILs and 24 PASSes. The app was fine; your terminal couldn't talk to Docker ("permission denied" on the Docker socket). Your user *is* in the `docker` group, but a terminal only picks that up when it's opened, and yours was opened before.
+  - **Why the script was wrong to carry on:** every database and container question came back empty, and the script kept going, giving misleading results **both ways**. There were false FAILs (e.g. a blank month), and false **PASSes** such as "sales unchanged", which passed only because before and after were both blank.
+  - **Fix:** a preflight step now checks python3, curl, Docker access, the API, today's date and the database before running anything. If any is missing it stops with a plain explanation and the fix, e.g. "run `newgrp docker` (or open a new terminal)".
+  - **Your data was untouched:** with the month blank, the target writes went to an invalid address and were rejected (the `307`s), and the future-dated sale test was skipped. The database still has 150 sales and the 3 original targets.
+  - **Checked:** a locked Docker socket (your case) gives the permission message; Docker unreachable gives a "can't reach the database" message with Docker's own error. Both exit with code 2 and run no checks. A normal run is still **49 passed, 0 failed**.
