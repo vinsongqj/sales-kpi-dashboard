@@ -113,9 +113,7 @@ async def summary(conn, month=None, category=None, channel=None):
     # Revenue by category
     by_category = {}
     for r in rows:
-        subtotal = by_category.get(r["category"], 0)
-        subtotal = _line_net(r)
-        by_category[r["category"]] = subtotal
+        by_category[r["category"]] = by_category.get(r["category"], 0.0) + _line_net(r)
 
     # Revenue by channel
     by_channel = {"online": 0.0, "in_store": 0.0}

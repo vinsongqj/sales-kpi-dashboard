@@ -21,3 +21,14 @@ Entry format:
 - **What changed:** `backend/db.py` `summary()` adds `status = 'completed'` to the filtered query, whether or not other filters are set. `list_sales()` is unchanged, so refunded rows still show (struck through) in the table.
 - **Why:** The brief defines revenue as "net revenue from **completed** sales", but `summary()` selected every row. Refunded sales were counted as revenue and as orders, which inflated the total, the order count, AOV and both breakdowns. Orders and AOV now count completed sales only, so AOV = net revenue ÷ orders that actually earned it.
 - **Verification:** `py_compile` OK. `/api/summary?month=2026-11`: total **6265.70 → 6058.70**, orders **46 → 43**, AOV **136.21 → 140.90**, which matches Postgres `… WHERE status='completed'` = `6058.70 | 43` and the hand-computed seed value. "All months" (no filters) also works, because the `WHERE` is built correctly when no other clause exists. (The breakdowns and attainment are still wrong at this point; they're fixed in A3–A5.)
+
+## A3 · fix(kpi): accumulate revenue per category
+- **What changed:** `backend/db.py` `summary()`. The category loop is now `by_category[cat] = by_category.get(cat, 0.0) + _line_net(r)`.
+- **Why:** The old loop read the running subtotal and then overwrote it with `subtotal = _line_net(r)`, so each category ended up showing only its **last** sale rather than the sum. The bars therefore didn't add up to Total Net Revenue (880 vs 6058.70 for 2026-11).
+- **Verification:** `py_compile` OK. `/api/summary?month=2026-11` by category, before → after:
+  - Cafe 36.00 → **289.50**
+  - Coaching 255.00 → **1915.20**
+  - Court Booking 480.00 → **3170.00**
+  - Pro Shop 120.00 → **684.00**
+
+  These match Postgres `GROUP BY category` exactly and sum to the 6058.70 total.
