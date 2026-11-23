@@ -32,3 +32,12 @@ Entry format:
   - Pro Shop 120.00 → **684.00**
 
   These match Postgres `GROUP BY category` exactly and sum to the 6058.70 total.
+
+## A4 · fix(kpi): bucket channels by exact match
+- **What changed:** `backend/db.py` `summary()`. The channel loop now does `if ch in by_channel: by_channel[ch] += _line_net(r)`, an exact key match against `online` / `in_store`.
+- **Why:** The old code checked `if "in" in ch` first. That's a substring test, and `"online"` contains `"in"` (o-n-l-**i-n**-e), so every online sale fell into `in_store` and the `elif "online"` branch could never run. Online always showed RM 0.00.
+- **Verification:** `py_compile` OK. `/api/summary?month=2026-11` by channel:
+  - online 0.00 → **2204.70**
+  - in_store 6058.70 → **3854.00**
+
+  These match Postgres `GROUP BY channel`. With `&channel=online` the result is online 2204.70 and in_store 0.00. The only channel values in the DB are `online` and `in_store`, so the exact match drops nothing.

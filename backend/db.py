@@ -118,11 +118,10 @@ async def summary(conn, month=None, category=None, channel=None):
     # Revenue by channel
     by_channel = {"online": 0.0, "in_store": 0.0}
     for r in rows:
+        # Exact match: a substring test like `"in" in ch` also matches "online".
         ch = r["channel"]
-        if "in" in ch:
-            by_channel["in_store"] += _line_net(r)
-        elif "online" in ch:
-            by_channel["online"] += _line_net(r)
+        if ch in by_channel:
+            by_channel[ch] += _line_net(r)
 
     # Target attainment for the selected month
     target = None
