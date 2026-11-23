@@ -265,6 +265,14 @@ input:focus {
   margin: 10px 0 0;
 }
 
+.target-note {
+  margin: 0 0 14px;
+}
+
+form .target-note:last-child {
+  margin: 12px 0 0;
+}
+
 /* Add form ---------------------------------------------------------------- */
 .form-grid {
   display: grid;

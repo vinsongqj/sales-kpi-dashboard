@@ -214,3 +214,22 @@ Each entry answers three questions:
   - December's pace showed target RM 11,000 but pace still **N/A**, which is right because it hasn't started.
   - Changing November's target to RM 8,000 immediately updated attainment to **75.7%** and pace to **94.7%** (still at risk).
   - Test data was put back afterwards: November is RM 10,000 again and December's target was removed, so the targets table is back to its 3 original rows.
+
+## C2 · Target editor: the form on the dashboard
+- **What changed:** A new "Monthly Target" panel above "Add Sale" (`frontend/src/components/TargetEditor.jsx`), with `getTargets()` / `putTarget()` added to `api.js` and wiring in `App.jsx`.
+  - Pick a month (any month, including future ones) and enter a target in RM.
+  - It shows the month's **current target**, or "No target set for this month yet", and pre-fills the amount.
+  - The button reads **Set Target** or **Update Target**. It's disabled until the amount is a positive number that differs from the current target.
+  - It follows the dashboard's month filter. With "All months" selected it defaults to the current month (Malaysia time).
+  - After saving, the month list refreshes and the dashboard **jumps to that month**, so the new target, attainment and pace show straight away.
+- **Why:** C1 made saving a target possible, but only through the API. This puts it where a manager would use it. The form blocks zero, negative and empty amounts before sending, and the API rejects them again anyway (C1).
+- **How we checked:**
+  - Frontend builds (`✓ built`).
+  - The form's first render shows Month [2026-11], an empty Target field, the "No target set…" note and **Set Target**, before the saved targets load in.
+  - A bug was caught while reviewing: after saving, reloading the target list wiped the "Saved" message straight away. Clearing the message now only happens when you switch month.
+  - The API calls the form makes were tested in C1.
+- **Follow-up (your feedback): arrows move by RM 100, typing stays exact.** The Target box's up/down arrows used to change the amount by **RM 0.01**, which is pointless for targets in the thousands.
+  - They now move by **RM 100**.
+  - You can still type any amount with sen, e.g. **RM 12,345.67**.
+  - Normally the browser treats the step size as a rule and would reject 12,345.67 ("nearest valid values are 12,300 and 12,400"). So the form switches off the browser's own checks and uses its own instead: the month must be a real month, and the amount must be a number above 0. The API checks again (C1).
+  - Checked: frontend builds, and saving **12,345.67** through the API stored exactly **12,345.67** (the test target was removed afterwards).

@@ -6,6 +6,7 @@ import Breakdown from "./components/Breakdown.jsx";
 import AddSaleForm from "./components/AddSaleForm.jsx";
 import SalesTable from "./components/SalesTable.jsx";
 import PaceCard from "./components/PaceCard.jsx";
+import TargetEditor from "./components/TargetEditor.jsx";
 import { currentMonthMYT } from "./dates.js";
 
 export default function App() {
@@ -37,9 +38,19 @@ export default function App() {
     load();
   }, [load]);
 
+  const loadOptions = useCallback(() => api.getFilters().then(setOptions).catch(() => {}), []);
+
   useEffect(() => {
-    api.getFilters().then(setOptions).catch(() => {});
-  }, []);
+    loadOptions();
+  }, [loadOptions]);
+
+  // After a target is saved: refresh the month list (a new future month may
+  // now be selectable) and show that month so the change is visible at once.
+  const onTargetSaved = async (month) => {
+    await loadOptions();
+    if (month === filters.month) load();
+    else setFilters((f) => ({ ...f, month }));
+  };
 
   return (
     <div className="app">
@@ -66,6 +77,8 @@ export default function App() {
           <Breakdown title="Revenue by Channel" rows={summary.by_channel} labelKey="channel" />
         </div>
       )}
+
+      <TargetEditor selectedMonth={filters.month} onSaved={onTargetSaved} />
 
       <AddSaleForm options={options} onCreated={load} />
 
