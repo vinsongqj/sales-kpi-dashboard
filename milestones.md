@@ -387,3 +387,16 @@ A full re-read of every Part B/C change, looking for leftover duplicate code and
   - Pace: day 24 of 30, projected RM 7,573.38, 75.7%, at risk
   - `check.sh`: 53 checks, 21 bad-input cases, 60 of 60 combinations matching the database
   - The 7 colours turned into theme tokens, and the contrast results
+
+## Extra · Makefile shortcuts
+- **What changed:** a `Makefile` at the repo root with short commands. `make` on its own lists them. No app code changed.
+  - **Running:** `make up` (start and wait until ready), `make down`, `make restart`, `make reset` (fresh sample data), `make logs`, `make ps`
+  - **Checking:** `make check`, `make compile`, `make build`, and `make verify` (all three)
+  - **Database:** `make psql` (a database shell)
+- **Why:** to run the project, or check it, with one short command instead of remembering long Docker commands. `make up` also waits until the API answers, then prints the dashboard and API addresses.
+- **How we checked:**
+  - `make` listed all 12 commands.
+  - `make ps` showed the 3 services running.
+  - `make up` printed "Ready" with the addresses.
+  - `make verify` gave "Backend compiles", a successful frontend build, and **53 passed, 0 failed**.
+  - `make reset` and `make down` weren't run, to avoid wiping or stopping the running data. They only wrap the existing `docker compose down -v` / `down` commands.
