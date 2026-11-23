@@ -112,3 +112,13 @@ Each entry answers three questions:
 - **How we checked:**
   - The dashboard totals were compared with the database for **every combination** of month (all, Sep, Oct, Nov), category (all + 4) and channel (all + 2). That's **60 combinations, 0 mismatches** in revenue, orders and average sale, and in every case the category bars and channel bars added up to the total.
   - Backend compiles; frontend builds.
+
+## A9 · Names made only of spaces are now rejected
+- **What changed:** New sales have extra spaces trimmed from the start and end of their text fields before they're checked (`backend/sales/routes.py`, `SaleIn`).
+- **Why:** A7 rejected empty product and category names, but a name of just spaces ("   ") still got through, because spaces count as characters. Trimming first means:
+  - a blank-looking name is correctly rejected as empty
+  - "Cafe " with a stray space is saved as "Cafe", rather than appearing as a separate category in the filter and the breakdown
+- **How we checked:**
+  - Product "   " → **rejected (422)**; category "  " → **rejected (422)**.
+  - Product "  Latte " with category "Cafe " → **saved as "Latte" / "Cafe"** (the test sale was deleted afterwards).
+  - The database still has 150 sales in 4 categories.

@@ -8,7 +8,7 @@ from datetime import date
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 import db
 
@@ -21,6 +21,10 @@ Month = Annotated[str | None, Query(pattern=MONTH_PATTERN)]
 
 
 class SaleIn(BaseModel):
+    # Trim surrounding spaces from text fields before validating, so "   " is
+    # rejected as empty and "Cafe " doesn't become a separate category.
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     sale_date: date
     product: str = Field(min_length=1)
     category: str = Field(min_length=1)
