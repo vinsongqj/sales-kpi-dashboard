@@ -350,7 +350,7 @@ A full re-read of every Part B/C change, looking for leftover duplicate code and
 - **What changed:** A 7-slide deck on claude.ai: https://claude.ai/artifact/P6beCsDSKYyVgg7tzaxV7r (private until shared from its Share menu). Each slide has speaker notes. Nothing in the app's code changed.
   1. Title
   2. The five calculation bugs: what was wrong, the fix, and November before → after
-  3. The four safety fixes: Malaysia time, input validation, never NaN, and the Infinity crash
+  3. The safety fixes: Malaysia time, input validation, never NaN, plus the Infinity crash found in a later review
   4. Pace to Target: the formula, the November example, and how each tricky case is handled
   5. Part C: the target editor, with dark mode as a smaller extra
   6. Verification: `scripts/check.sh` and its 49 checks, including the "put the bug back" test
@@ -373,3 +373,17 @@ A full re-read of every Part B/C change, looking for leftover duplicate code and
   - **Fix:** it now comes back empty and the card shows **N/A**, matching how the dashboard treats every other "no data" case.
   - **Checked:** December (0 orders) → N/A; November is unchanged at RM 140.90.
 - **Suite and deck updated:** these cases were added to `scripts/check.sh`, which also now accepts an empty average where a selection has no orders. Result: **53 passed, 0 failed**, and the data is unchanged (150 sales, 3 targets). The slide deck's numbers were updated to match: 53 checks, 21 bad inputs.
+
+## D2 · Slide facts re-checked
+- **What changed:** every claim in the deck was checked against the live app, the database, `scripts/check.sh` and the git history. Six were corrected:
+  - **Slide 2 title:** "five bugs in one function" → "in the KPI maths". The discount bug was in the `_line_net()` helper; the other four were in `summary()`.
+  - **Slide 2 last column:** renamed "Effect of the fix (Nov)". Each "before" is the value just before that fix, not the original screen, so the attainment row reads 14,090% → 60.6% while the original screen showed 13,715.2%. The speaker notes now give the original figures (RM 6,309, 46 orders, 13,715.2%).
+  - **Slides 1 and 3:** "four safety fixes" → "safety fixes". The slide shows three, and the Infinity crash is now labelled as found in a later review.
+  - **Slide 3 notes:** dropped the unverified "no daylight saving since 1982". Now: Malaysia doesn't use daylight saving.
+  - **Slide 6 notes:** "about a minute" → "under 30 seconds". It ran in 25 seconds.
+  - **Slide 7:** "I made every commit" → "after the first fix, I made every commit". Claude made the first two commits (this file, and A1) before the user took over committing.
+- **Confirmed unchanged as of 24 Nov 2026 (MYT):**
+  - November: revenue RM 6,058.70, 43 orders, average RM 140.90, attainment 60.6%, and the category and channel figures
+  - Pace: day 24 of 30, projected RM 7,573.38, 75.7%, at risk
+  - `check.sh`: 53 checks, 21 bad-input cases, 60 of 60 combinations matching the database
+  - The 7 colours turned into theme tokens, and the contrast results
