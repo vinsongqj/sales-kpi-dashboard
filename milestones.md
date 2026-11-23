@@ -164,3 +164,31 @@ Each entry answers three questions:
     | No sales yet | 24/30 | 0 | 0% | at risk |
     | Exactly on target | 15/30 | 5,000 | 100% | on track |
     | December viewed on 1 Jan (year change) | 31/31 | 900 (actual) | 18% | at risk |
+
+## B2 · Pace to Target: the dashboard panel
+- **What changed:** A new "Pace to Target" panel sits under the KPI cards (`frontend/src/components/PaceCard.jsx`). It's loaded by `App.jsx` through a new `getPace()` in `api.js`, and styled in `styles.css`. It shows:
+  - month-to-date revenue
+  - days elapsed / days in month
+  - projected month-end revenue
+  - target
+  - pace vs target, in RM (+/−) and as a % of target
+  - an **On track** (green) / **At risk** (red) / **N/A** (grey) badge
+  - a bar showing how much of the target has been reached so far
+- **Why:** This is the visible half of Part B. All the maths happens in the API (B1), so the panel only displays it. Anything the API can't work out arrives empty and is shown as **N/A**, never NaN or Infinity. A short note explains the special cases:
+  - **Past month:** the "Projected" label changes to "Final month total", with a note that the month is over.
+  - **Future month:** "This month hasn't started yet, so there's nothing to project."
+  - **No target:** "No target is set for this month."
+  - **A category/channel filter is on:** "Store-wide: category and channel filters don't apply here", so the numbers aren't mistaken for the filtered view.
+  - **"All months" selected:** a prompt to pick a month, since pace only makes sense for one month.
+- **How we checked:**
+  - Frontend builds (`✓ built`).
+  - The panel was rendered with real API data for each case:
+    - **Nov (current):** At risk · RM 6,058.70 · 24 / 30 · projected RM 7,573.38 · target RM 10,000.00 · **−RM 2,426.62, 75.7% of target**
+    - **Oct (past):** 31 / 31 · "Final month total" RM 7,082.65 · 70.8% · "month is over" note
+    - **Dec (future):** N/A badge · 0 / 31 · projected, target and pace all **N/A** · "hasn't started" and "no target" notes
+    - **Aug (no target):** pace **N/A** · "no target" note
+    - **Nov with a Cafe filter:** same store-wide numbers, plus the "store-wide" note
+    - **All months:** "Select a month…" prompt
+  - None of the rendered months contained "NaN", "Infinity" or "undefined".
+  - A small fix along the way: with no pace the panel briefly read "N/A of target", so the "% of target" line now only appears when there is a percentage.
+  - Note: December can't be picked from the month dropdown yet, because it only lists months that have sales. Part C fixes that.
