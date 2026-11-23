@@ -69,6 +69,20 @@ def _line_net(r):
     return float(gross * (1 - r["discount_pct"] / 100))
 
 
+async def _month_net_revenue(conn, month):
+    """Store-wide net revenue (completed sales only) for a 'YYYY-MM' month.
+
+    Deliberately ignores category/channel filters: monthly targets are
+    store-wide, so progress against them must be measured store-wide too.
+    """
+    rows = await conn.fetch(
+        "SELECT quantity, unit_price, discount_pct FROM sales"
+        " WHERE status = 'completed' AND to_char(sale_date, 'YYYY-MM') = $1",
+        month,
+    )
+    return sum(_line_net(r) for r in rows)
+
+
 # --------------------------------------------------------------------------- #
 # Filters
 # --------------------------------------------------------------------------- #
@@ -123,13 +137,18 @@ async def summary(conn, month=None, category=None, channel=None):
         if ch in by_channel:
             by_channel[ch] += _line_net(r)
 
-    # Target attainment for the selected month
+    # Target attainment for the selected month = store-wide revenue / target.
+    # None (rendered "—") when no month is selected or the target is missing
+    # or non-positive, so we never divide by zero.
     target = None
+    attainment_pct = None
     if month:
         target = await conn.fetchval(
             "SELECT target_amount FROM monthly_targets WHERE month = $1", month
         )
-    attainment_pct = round(total_revenue / order_count * 100, 1) if order_count else None
+        if target is not None and target > 0:
+            month_revenue = await _month_net_revenue(conn, month)
+            attainment_pct = round(month_revenue / float(target) * 100, 1)
 
     return {
         "total_revenue": round(total_revenue, 2),
