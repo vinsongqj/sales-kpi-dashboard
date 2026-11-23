@@ -7,6 +7,7 @@ sample data the first time the database is empty.
 The dashboard KPIs are computed in `summary()`.
 """
 
+import calendar
 import os
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -172,6 +173,75 @@ async def summary(conn, month=None, category=None, channel=None):
             {"channel": k, "revenue": round(v, 2)} for k, v in by_channel.items()
         ],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Pace to Target
+# --------------------------------------------------------------------------- #
+
+def _round(v, ndigits=2):
+    return round(v, ndigits) if v is not None else None
+
+
+def _pace(mtd, target, year, month, today):
+    """Run-rate forecast for one month. Pure function — no DB, easy to check.
+
+    - Past month:    the month is over, so projected = actual total.
+    - Current month: projected = MTD / days elapsed * days in month, where
+                     today counts as elapsed (so day 1 never divides by zero).
+    - Future month:  0 days elapsed, nothing to project -> None ("N/A").
+
+    Days in month comes from the calendar (28/29/30/31, leap years included).
+    Pace vs target is None when there's no projection or no positive target.
+    """
+    days_in_month = calendar.monthrange(year, month)[1]
+
+    if (year, month) < (today.year, today.month):
+        period, days_elapsed, projected = "past", days_in_month, mtd
+    elif (year, month) == (today.year, today.month):
+        period, days_elapsed = "current", today.day
+        projected = mtd / days_elapsed * days_in_month
+    else:
+        period, days_elapsed, projected = "future", 0, None
+
+    has_target = target is not None and target > 0
+    if projected is not None and has_target:
+        pace_rm = projected - target
+        pace_pct = projected / target * 100
+        status = "on_track" if projected >= target else "at_risk"
+    else:
+        pace_rm = pace_pct = status = None
+
+    return {
+        "month": f"{year}-{month:02d}",
+        "period": period,
+        "as_of": today.isoformat(),
+        "mtd_revenue": _round(mtd),
+        "days_elapsed": days_elapsed,
+        "days_in_month": days_in_month,
+        "projected_revenue": _round(projected),
+        "target": _round(target),
+        "pace_rm": _round(pace_rm),
+        "pace_pct": _round(pace_pct, 1),
+        "status": status,
+    }
+
+
+async def pace(conn, month=None):
+    """Pace to Target for a 'YYYY-MM' month (default: current month, MYT).
+
+    Store-wide, like attainment: the target covers the whole store, so
+    category/channel filters don't apply.
+    """
+    today = today_myt()
+    month = month or today.strftime("%Y-%m")
+    year, mon = (int(p) for p in month.split("-"))
+
+    mtd = await _month_net_revenue(conn, month)
+    target = await conn.fetchval(
+        "SELECT target_amount FROM monthly_targets WHERE month = $1", month
+    )
+    return _pace(mtd, float(target) if target is not None else None, year, mon, today)
 
 
 # --------------------------------------------------------------------------- #

@@ -41,6 +41,13 @@ async def get_summary(month: Month = None, category: str | None = None, channel:
         return await db.summary(conn, month, category, channel)
 
 
+@router.get("/pace")
+async def get_pace(month: Month = None):
+    """Pace to Target for a month (defaults to the current month in MYT)."""
+    async with db.pool.acquire() as conn:
+        return await db.pace(conn, month)
+
+
 @router.get("/sales")
 async def get_sales(month: Month = None, category: str | None = None, channel: str | None = None):
     async with db.pool.acquire() as conn:

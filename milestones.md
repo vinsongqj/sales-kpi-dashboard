@@ -122,3 +122,45 @@ Each entry answers three questions:
   - Product "   " → **rejected (422)**; category "  " → **rejected (422)**.
   - Product "  Latte " with category "Cafe " → **saved as "Latte" / "Cafe"** (the test sale was deleted afterwards).
   - The database still has 150 sales in 4 categories.
+
+## B1 · Pace to Target: the calculation and API
+- **What changed:**
+  - A new `/api/pace?month=YYYY-MM` endpoint (`backend/sales/routes.py`). With no month it uses the current month in Malaysia time.
+  - The maths lives in `_pace()` in `backend/db.py`. It's a plain function with no database, so every edge case can be tested directly. `pace()` fetches the month's revenue (reusing A5's `_month_net_revenue`) and target, then calls it.
+  - Response fields:
+    - month-to-date revenue
+    - days elapsed / days in month
+    - projected month-end revenue
+    - target
+    - pace vs target, in RM and %
+    - status (`on_track` / `at_risk`)
+    - `period` (past / current / future) and `as_of` (today's Malaysia date)
+- **Why:** This is the Part B feature. Forecast = revenue so far ÷ days elapsed × days in the month. The brief's tricky cases are handled like this:
+  - **Past month:** it's over, so the "projection" is just the actual total.
+  - **Current month:** today counts as a day elapsed. On the 1st that's 1 day, not 0, so there's never a divide-by-zero. The trade-off is that early-month forecasts swing a lot (one good sale on the 1st projects a huge month).
+  - **Future month:** nothing has happened yet (0 days), so projected and pace are **N/A** rather than a division by zero.
+  - **Month lengths:** taken from the calendar, which knows Feb has 29 days in leap years.
+  - **No target, or a target of 0:** pace and status are **N/A**. The forecast is still shown, since it doesn't need a target.
+  - **Today:** Malaysia time (A6). Store-wide like attainment (A5), so it ignores the category/channel filters.
+- **How we checked:**
+  - **Live API:**
+    - November is "current", day **24 of 30**. Projected **RM 7,573.38** (6,058.70 ÷ 24 × 30, which matches a hand calculation), **75.7%** of target, **at risk**.
+    - The server's own clock (UTC) still said 23 Nov at that moment, but the API correctly reported 24 Nov (Malaysia).
+    - October is "past" with **31/31** days and projected = actual = **RM 7,082.65**. September is "past" with **30/30** days and **RM 5,764.45**.
+    - December is "future" with **0/31** days, and projected, pace and status are all **N/A**. August (no target) has pace **N/A**. `2026-13` is **rejected (422)**.
+  - **Edge cases** run straight through the calculation, all correct:
+
+    | Case | Days | Projected | Pace | Status |
+    |---|---|---|---|---|
+    | Feb 2024, leap year (RM 1,000 by day 10) | 10/29 | 2,900 | 58% | at risk |
+    | Feb 2026, not a leap year | 10/28 | 2,800 | 56% | at risk |
+    | April (30-day month) | 10/30 | 3,000 | 60% | at risk |
+    | January (31-day month) | 10/31 | 3,100 | 62% | at risk |
+    | Day 1 of the month | 1/31 | 9,300 | 186% | on track |
+    | Last day of the month | 31/31 | 4,500 | 90% | at risk |
+    | Past leap-year Feb (actual RM 4,800) | 29/29 | 4,800 | 96% | at risk |
+    | Future month | 0/31 | N/A | N/A | N/A |
+    | No target / target of 0 | 24/30 | 1,250 | N/A | N/A |
+    | No sales yet | 24/30 | 0 | 0% | at risk |
+    | Exactly on target | 15/30 | 5,000 | 100% | on track |
+    | December viewed on 1 Jan (year change) | 31/31 | 900 (actual) | 18% | at risk |
