@@ -5,34 +5,40 @@ lives in `db.summary()`.
 """
 
 from datetime import date
+from typing import Annotated, Literal
 
-from fastapi import APIRouter
-from pydantic import BaseModel
+from fastapi import APIRouter, Query
+from pydantic import BaseModel, Field
 
 import db
 
 router = APIRouter()
 
+# 'YYYY-MM' with a real month (01–12). Bad values get a 422 instead of
+# silently matching nothing or breaking date math downstream.
+MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
+Month = Annotated[str | None, Query(pattern=MONTH_PATTERN)]
+
 
 class SaleIn(BaseModel):
     sale_date: date
-    product: str
-    category: str
-    channel: str
-    quantity: int
-    unit_price: float
-    discount_pct: float = 0
-    status: str = "completed"
+    product: str = Field(min_length=1)
+    category: str = Field(min_length=1)
+    channel: Literal["online", "in_store"]
+    quantity: int = Field(ge=1)
+    unit_price: float = Field(ge=0)
+    discount_pct: float = Field(default=0, ge=0, le=100)
+    status: Literal["completed", "refunded"] = "completed"
 
 
 @router.get("/summary")
-async def get_summary(month: str | None = None, category: str | None = None, channel: str | None = None):
+async def get_summary(month: Month = None, category: str | None = None, channel: str | None = None):
     async with db.pool.acquire() as conn:
         return await db.summary(conn, month, category, channel)
 
 
 @router.get("/sales")
-async def get_sales(month: str | None = None, category: str | None = None, channel: str | None = None):
+async def get_sales(month: Month = None, category: str | None = None, channel: str | None = None):
     async with db.pool.acquire() as conn:
         return await db.list_sales(conn, month, category, channel)
 

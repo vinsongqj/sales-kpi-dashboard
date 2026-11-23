@@ -70,3 +70,25 @@ Each entry answers three questions:
     - 28 Feb 2028 16:30 UTC → **2028-02-29** (leap day)
   - At the time of this change (23:40 in Malaysia, 15:40 UTC) both clocks happened to agree on 23 Nov. After 16:00 UTC they'd disagree, and the new code would follow Malaysia.
   - The existing sample data isn't regenerated, because seeding only runs on an empty database. The fix applies the next time the data is reset.
+
+## A7 · The API now rejects bad input instead of storing or using it
+- **What changed:** The API now checks what it's given (`backend/sales/routes.py`):
+  - **Month filter** must look like a real month, `YYYY-MM` with 01–12.
+  - **New sales** must have:
+    - quantity of at least 1
+    - price of 0 or more
+    - discount between 0 and 100%
+    - channel of `online` or `in_store`
+    - status of `completed` or `refunded`
+    - a product and category name that aren't empty
+
+  Anything else is turned away with an error (HTTP 422) saying what's wrong.
+- **Why:** The browser form has some limits, but the API itself accepted anything. That let bad data reach the numbers:
+  - A discount of 150% would make a sale count as **negative** revenue.
+  - A channel spelled "web" would be stored but left out of both channel bars, so they'd no longer add up to the total.
+  - A typo'd status would quietly drop a sale from revenue.
+  - A month like `2026-13` would just show an empty dashboard instead of an error, and it would break the date maths in Part B.
+- **How we checked:**
+  - Month filter: `2026-13`, `2026-1`, `abc` and `2026-00` → **rejected (422)**; `2026-11` and no month → **OK (200)**.
+  - New sales: quantity 0, discount 150, channel "web", status "void", price −5 and an empty product name → all **rejected (422)**.
+  - A valid sale still saves (it was deleted again afterwards); the database still holds 150 rows.
