@@ -95,6 +95,10 @@ def _build_filters(month, category, channel):
 
 async def summary(conn, month=None, category=None, channel=None):
     where, params = _build_filters(month, category, channel)
+    # Net revenue counts completed sales only; refunded lines earn nothing and
+    # are not orders. (list_sales still returns them so the table can show them.)
+    completed = "status = 'completed'"
+    where = f"{where} AND {completed}" if where else f"WHERE {completed}"
     rows = await conn.fetch(f"SELECT * FROM sales {where}", *params)
 
     # Totals
