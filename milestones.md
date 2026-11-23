@@ -92,3 +92,16 @@ Each entry answers three questions:
   - Month filter: `2026-13`, `2026-1`, `abc` and `2026-00` → **rejected (422)**; `2026-11` and no month → **OK (200)**.
   - New sales: quantity 0, discount 150, channel "web", status "void", price −5 and an empty product name → all **rejected (422)**.
   - A valid sale still saves (it was deleted again afterwards); the database still holds 150 rows.
+
+## A8 · The dashboard can never show "NaN" or "Infinity"
+- **What changed:**
+  - The money and percentage formatters (`frontend/src/format.js`) now show **"N/A"** for anything that isn't a real number. That covers empty values, "not a number" and infinity.
+  - The breakdown bars (`Breakdown.jsx`) can't have a broken or over-wide width.
+- **Why:** The brief says the dashboard must never show `NaN` or `Infinity`. The backend now avoids dividing by zero (A5), but the screen shouldn't depend on that alone:
+  - The old formatters only handled an empty value. Anything else invalid would have been printed as "RM NaN" or "Infinity%".
+  - The brief asks for a sensible "N/A", so empty values now show "N/A" instead of the old "—". For example, Target Attainment for a month with no target now reads **N/A**.
+- **How we checked:**
+  - Frontend builds (`✓ built`).
+  - Each formatter was fed a list of tricky values:
+    - real numbers come out as normal: `6058.7` → **RM 6,058.70**, `0` → **RM 0.00**, `"10.00"` → **RM 10.00**
+    - empty, NaN, Infinity, −Infinity, blank text and `"abc"` all come out as **N/A**
