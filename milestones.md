@@ -192,3 +192,25 @@ Each entry answers three questions:
   - None of the rendered months contained "NaN", "Infinity" or "undefined".
   - A small fix along the way: with no pace the panel briefly read "N/A of target", so the "% of target" line now only appears when there is a percentage.
   - Note: December can't be picked from the month dropdown yet, because it only lists months that have sales. Part C fixes that.
+
+## C1 · Target editor: saving a target, and future months in the dropdown
+- **What changed:**
+  - A new `PUT /api/targets/{month}` endpoint (`backend/sales/routes.py`, `db.upsert_target`). It creates a month's target, or replaces it if one already exists.
+  - The month dropdown (`db.filters`) now lists months that have **sales or a target**, rather than only months with sales.
+- **Why I picked this for Part C:** The dashboard is built around monthly targets, but there was **no way to set one**. Only three months were ever given a RM 10,000 target, when the sample data was created. In practice:
+  - a manager couldn't plan next month's target or correct this month's
+  - any month outside those three was stuck on "N/A" forever
+  - future months couldn't even be picked from the dropdown, which only listed months with sales
+
+  With this, you can set a target for next month, select it straight away, and see the Part B "future month → N/A" handling live.
+- **Safety checks:**
+  - The month must be a real month.
+  - The target must be **more than 0**. A zero target is exactly the divide-by-zero case Parts A/B guard against, so it isn't allowed in.
+  - The target must fit the database column (under 10 billion).
+- **How we checked:**
+  - Bad input is **rejected (422)**: month `2026-13`, target 0, −100, 1 trillion, or missing.
+  - Setting December to RM 12,000 and then RM 11,000 **saved and replaced** it (one row, not two).
+  - The dropdown then listed **2026-12** at the top.
+  - December's pace showed target RM 11,000 but pace still **N/A**, which is right because it hasn't started.
+  - Changing November's target to RM 8,000 immediately updated attainment to **75.7%** and pace to **94.7%** (still at risk).
+  - Test data was put back afterwards: November is RM 10,000 again and December's target was removed, so the targets table is back to its 3 original rows.

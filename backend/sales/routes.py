@@ -7,7 +7,7 @@ lives in `db.summary()`.
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Path, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 import db
@@ -77,3 +77,16 @@ async def get_filters():
 async def get_targets():
     async with db.pool.acquire() as conn:
         return await db.list_targets(conn)
+
+
+class TargetIn(BaseModel):
+    # Must be positive: a zero target would make attainment/pace meaningless.
+    # NUMERIC(12,2) holds up to 9,999,999,999.99.
+    target_amount: float = Field(gt=0, lt=10_000_000_000)
+
+
+@router.put("/targets/{month}")
+async def put_target(target: TargetIn, month: Annotated[str, Path(pattern=MONTH_PATTERN)]):
+    """Set (create or replace) the target for one month."""
+    async with db.pool.acquire() as conn:
+        return await db.upsert_target(conn, month, target.target_amount)

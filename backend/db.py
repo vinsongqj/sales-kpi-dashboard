@@ -280,8 +280,11 @@ async def delete_sale(conn, sale_id):
 async def filters(conn):
     cats = await conn.fetch("SELECT DISTINCT category FROM sales ORDER BY category")
     chans = await conn.fetch("SELECT DISTINCT channel FROM sales ORDER BY channel")
+    # Months with sales OR a target, so a future month becomes selectable as
+    # soon as it has a target (UNION also removes duplicates).
     months = await conn.fetch(
-        "SELECT DISTINCT to_char(sale_date, 'YYYY-MM') AS m FROM sales ORDER BY m DESC"
+        "SELECT to_char(sale_date, 'YYYY-MM') AS m FROM sales"
+        " UNION SELECT month FROM monthly_targets ORDER BY m DESC"
     )
     return {
         "categories": [r["category"] for r in cats],
@@ -295,6 +298,18 @@ async def list_targets(conn):
         "SELECT month, target_amount FROM monthly_targets ORDER BY month DESC"
     )
     return [{"month": r["month"], "target_amount": float(r["target_amount"])} for r in rows]
+
+
+async def upsert_target(conn, month, amount):
+    """Create or replace the target for a 'YYYY-MM' month."""
+    row = await conn.fetchrow(
+        "INSERT INTO monthly_targets (month, target_amount) VALUES ($1, $2)"
+        " ON CONFLICT (month) DO UPDATE SET target_amount = EXCLUDED.target_amount"
+        " RETURNING month, target_amount",
+        month,
+        Decimal(str(amount)),
+    )
+    return {"month": row["month"], "target_amount": float(row["target_amount"])}
 
 
 # --------------------------------------------------------------------------- #
