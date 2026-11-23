@@ -147,7 +147,7 @@ async def summary(conn, month=None, category=None, channel=None):
             by_channel[ch] += _line_net(r)
 
     # Target attainment for the selected month = store-wide revenue / target.
-    # None (rendered "—") when no month is selected or the target is missing
+    # None (rendered "N/A") when no month is selected or the target is missing
     # or non-positive, so we never divide by zero.
     target = None
     attainment_pct = None

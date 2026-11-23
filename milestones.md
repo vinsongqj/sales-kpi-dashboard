@@ -105,3 +105,10 @@ Each entry answers three questions:
   - Each formatter was fed a list of tricky values:
     - real numbers come out as normal: `6058.7` → **RM 6,058.70**, `0` → **RM 0.00**, `"10.00"` → **RM 10.00**
     - empty, NaN, Infinity, −Infinity, blank text and `"abc"` all come out as **N/A**
+
+## Part A review · Everything re-checked end to end
+- **What changed:** Fixed one out-of-date code comment in `backend/db.py`. It still said a missing target shows "—", but since A8 it shows "N/A". No other leftovers were found: no unused imports or helpers, and the old browser-clock date functions were fully removed.
+- **Why:** A final pass to make sure Part A is complete and consistent before starting Part B.
+- **How we checked:**
+  - The dashboard totals were compared with the database for **every combination** of month (all, Sep, Oct, Nov), category (all + 4) and channel (all + 2). That's **60 combinations, 0 mismatches** in revenue, orders and average sale, and in every case the category bars and channel bars added up to the total.
+  - Backend compiles; frontend builds.
